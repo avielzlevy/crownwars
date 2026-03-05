@@ -25,6 +25,7 @@ export class InputSystem {
     window.addEventListener('keyup',   this.onKey.bind(this, false));
     window.addEventListener('mousemove', this.onMouse.bind(this));
     window.addEventListener('mousedown', this.onMouseDown.bind(this));
+    window.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
   private onKey(down: boolean, e: KeyboardEvent): void {

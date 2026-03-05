@@ -54,15 +54,26 @@ export class CharacterModel {
     const inner = CharacterModel.proto.clone(true);
     inner.scale.setScalar(CharacterModel.scale);
     inner.position.y = CharacterModel.groundOffset;
+    inner.rotation.y = Math.PI; // Flip model to face -Z (match camera forward)
 
     // Deep-clone materials so shirt colour is per-instance
     inner.traverse((child) => {
       const mesh = child as THREE.Mesh;
       if (!mesh.isMesh) return;
       if (Array.isArray(mesh.material)) {
-        mesh.material = mesh.material.map((m) => (m as THREE.Material).clone());
-        const shirt = mesh.material[SHIRT_MAT_IDX] as THREE.MeshStandardMaterial;
-        if (shirt?.color) shirt.color.setHex(shirtColorHex);
+        mesh.material = mesh.material.map((m) => {
+          const cloned = (m as THREE.Material).clone();
+          if (cloned.name === SHIRT_MAT_NAME && (cloned as THREE.MeshStandardMaterial).color) {
+            (cloned as THREE.MeshStandardMaterial).color.setHex(shirtColorHex);
+          }
+          return cloned;
+        });
+      } else {
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        if (mat.name === SHIRT_MAT_NAME) {
+          mesh.material = mat.clone();
+          (mesh.material as THREE.MeshStandardMaterial).color.setHex(shirtColorHex);
+        }
       }
     });
 
@@ -75,9 +86,19 @@ export class CharacterModel {
   static applyShirtColor(root: THREE.Group, shirtColorHex: number): void {
     root.traverse((child) => {
       const mesh = child as THREE.Mesh;
-      if (!mesh.isMesh || !Array.isArray(mesh.material)) return;
-      const shirt = mesh.material[SHIRT_MAT_IDX] as THREE.MeshStandardMaterial;
-      if (shirt?.color) shirt.color.setHex(shirtColorHex);
+      if (!mesh.isMesh) return;
+      if (Array.isArray(mesh.material)) {
+        for (const m of mesh.material) {
+          if (m.name === SHIRT_MAT_NAME && (m as THREE.MeshStandardMaterial).color) {
+            (m as THREE.MeshStandardMaterial).color.setHex(shirtColorHex);
+          }
+        }
+      } else {
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        if (mat.name === SHIRT_MAT_NAME && mat.color) {
+          mat.color.setHex(shirtColorHex);
+        }
+      }
     });
   }
 

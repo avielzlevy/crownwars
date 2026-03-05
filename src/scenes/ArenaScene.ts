@@ -18,7 +18,6 @@ export class ArenaScene {
     scene.add(this.root);
     this.buildLighting(scene);
     this.buildFloor();
-    this.buildWalls();
     this.buildCeiling();
     this.buildDecorativeElements();
   }

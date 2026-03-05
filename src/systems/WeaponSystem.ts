@@ -6,7 +6,7 @@ import type { HeldItemView }            from '../entities/HeldItemView';
 
 export type WeaponState = 'idle' | 'swinging' | 'cooldown';
 
-const MELEE_RANGE    = 2.2;
+const MELEE_RANGE    = 3.5;
 const MELEE_SWING_T  = 0.22;
 const MELEE_COOLDOWN = 0.45;
 const THROW_COOLDOWN = 0.6;

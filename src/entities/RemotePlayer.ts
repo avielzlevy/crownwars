@@ -17,6 +17,7 @@ export class RemotePlayer {
   private targetYaw  = 0;
   private isMoving   = false;
   private legTimer   = 0;
+  private currentName = '';
   shirtColor         = 0x3b82f6;
 
   constructor(state: S_PlayerState, scene: THREE.Scene) {
@@ -26,8 +27,16 @@ export class RemotePlayer {
     this.charRoot = CharacterModel.clone(this.shirtColor);
     this.root.add(this.charRoot);
 
-    this.buildLabel(state.name ?? state.id.slice(0, 6));
+    this.currentName = state.name ?? state.id.slice(0, 6);
+    this.buildLabel(this.currentName);
     this.applyState(state);
+
+    // Invisible hitbox for reliable hitscan detection against GLB models
+    const hitboxGeo = new THREE.BoxGeometry(0.8, PLAYER_HEIGHT, 0.8);
+    const hitboxMat = new THREE.MeshBasicMaterial({ visible: false });
+    const hitbox    = new THREE.Mesh(hitboxGeo, hitboxMat);
+    hitbox.position.y = PLAYER_HEIGHT / 2;
+    this.root.add(hitbox);
 
     // Tag all descendant meshes for hitscan detection
     this.root.traverse((child) => {
@@ -62,11 +71,38 @@ export class RemotePlayer {
     this.root.add(this.label);
   }
 
+  private updateLabel(name: string): void {
+    if (!this.label) return;
+    const mat = this.label.material as THREE.SpriteMaterial;
+    const tex = mat.map;
+    if (!tex) return;
+    const canvas = tex.image as HTMLCanvasElement;
+    const ctx = canvas.getContext('2d')!;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.beginPath();
+    ctx.roundRect(4, 4, 248, 48, 8);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font      = 'bold 26px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(name.slice(0, 16), 128, 28);
+    tex.needsUpdate = true;
+  }
+
   applyState(state: S_PlayerState): void {
     const prev = this.targetPos.clone();
     this.targetPos.set(state.position.x, state.position.y + Y_OFFSET, state.position.z);
     this.targetYaw = state.rotation.y;
     this.isMoving  = prev.distanceToSquared(this.targetPos) > 0.0001;
+
+    // Update name label if it changed
+    const newName = state.name ?? state.id.slice(0, 6);
+    if (newName !== this.currentName) {
+      this.currentName = newName;
+      this.updateLabel(newName);
+    }
 
     // Update shirt colour if it changed
     const newColor = state.shirtColor ?? 0x3b82f6;
@@ -80,9 +116,10 @@ export class RemotePlayer {
     // Smooth position
     this.root.position.lerp(this.targetPos, Math.min(1, LERP_SPEED * delta));
 
-    // Smooth yaw (wrap to [-π, π])
-    const dyaw   = this.targetYaw - this.root.rotation.y;
-    const wrapped = ((dyaw + Math.PI) % (Math.PI * 2)) - Math.PI;
+    // Smooth yaw (wrap to [-π, π]  — use double-mod to handle JS negative %)
+    const dyaw    = this.targetYaw - this.root.rotation.y;
+    const TWO_PI  = Math.PI * 2;
+    const wrapped = ((dyaw + Math.PI) % TWO_PI + TWO_PI) % TWO_PI - Math.PI;
     this.root.rotation.y += wrapped * Math.min(1, LERP_SPEED * delta);
 
     // Walking animation — only applies to the fallback box character.

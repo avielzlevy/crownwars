@@ -53,6 +53,8 @@ export class Game {
   private playerName    = 'Player';
   private playerShirt   = 0x3b82f6;
   private localHealth   = 100;
+  private dead          = false;
+  private deathTimer    = 0;
 
   /** Called whenever the set of shirt colours in use by remote players changes. */
   onTakenColorsChanged: ((colors: Set<number>) => void) | null = null;
@@ -67,10 +69,26 @@ export class Game {
     this.net.shirtColor = hex;
   }
 
+  private die(): void {
+    this.dead = true;
+    this.deathTimer = 3;
+    this.hud.showDeath(this.deathTimer);
+    document.exitPointerLock();
+  }
+
   private respawn(): void {
+    this.dead = false;
     this.localHealth = 100;
     this.hud.setHealth(100);
-    this.movement.state.position.set(0, PLAYER_HEIGHT, 0);
+    this.hud.hideDeath();
+    // Respawn at a random edge position around the arena
+    const angle = Math.random() * Math.PI * 2;
+    const dist  = 12;
+    this.movement.state.position.set(
+      Math.cos(angle) * dist,
+      PLAYER_HEIGHT,
+      Math.sin(angle) * dist,
+    );
     this.movement.state.velocity.set(0, 0, 0);
   }
 
@@ -96,8 +114,6 @@ export class Game {
     this.particles = new ImpactParticles(this.scene);
     this.heldView  = new HeldItemView(this.scene);
 
-    this.setupNetwork();
-
     this.input.init();
 
     this.renderer.domElement.addEventListener('click', () => {
@@ -117,16 +133,35 @@ export class Game {
 
     // Receive existing state when we join
     this.net.on('initialState', (state) => {
+      // Authoritatively set playerId from server-provided ID
+      this.net.playerId = state.yourId;
+
+      // Clean up any RemotePlayer accidentally created for our own ID
+      this.removeSelfRemote();
+
       for (const p of state.players) {
+        if (p.id === this.net.playerId) continue;
         if (!this.remotePlayers.has(p.id)) {
           this.remotePlayers.set(p.id, new RemotePlayer(p, this.scene));
         }
       }
+
+      // Remove chairs that were already picked up before we joined
+      for (const ch of state.chairs) {
+        if (ch.broken) this.spawn.removeChairById(ch.id, this.scene);
+      }
+
       this.emitTakenColors();
+    });
+
+    // Another player picked up a chair — remove it from our scene
+    this.net.on('chairPickedUp', (chairId) => {
+      this.spawn.removeChairById(chairId, this.scene);
     });
 
     // Another player joined after us
     this.net.on('playerJoined', (p) => {
+      if (p.id === this.net.playerId) return; // never create self
       if (!this.remotePlayers.has(p.id)) {
         this.remotePlayers.set(p.id, new RemotePlayer(p, this.scene));
       }
@@ -140,9 +175,13 @@ export class Game {
 
     // Server's 20 Hz state broadcast — update remote player positions
     this.net.on('gameState', (state) => {
+      const activeIds = new Set<string>();
+
       for (const p of state.players) {
-        // Guard against race: playerId may not be set on very first packet
+        // Never process our own player
         if (!this.net.playerId || p.id === this.net.playerId) continue;
+        activeIds.add(p.id);
+
         const rp = this.remotePlayers.get(p.id);
         if (rp) {
           rp.applyState(p);
@@ -150,6 +189,16 @@ export class Game {
           this.remotePlayers.set(p.id, new RemotePlayer(p, this.scene));
         }
       }
+
+      // Reconcile: remove any remote players NOT in the current server state
+      // (handles missed 'playerLeft' events and stale connections)
+      for (const [id, rp] of this.remotePlayers) {
+        if (!activeIds.has(id)) {
+          rp.destroy(this.scene);
+          this.remotePlayers.delete(id);
+        }
+      }
+
       this.emitTakenColors();
     });
 
@@ -165,7 +214,7 @@ export class Game {
       if (hit.targetId === this.net.playerId) {
         this.localHealth = Math.max(0, this.localHealth - hit.damage);
         this.hud.setHealth(this.localHealth);
-        if (this.localHealth <= 0) this.respawn();
+        if (this.localHealth <= 0 && !this.dead) this.die();
       }
     });
   }
@@ -174,12 +223,13 @@ export class Game {
     if (!this.ready) return;
     this.running = true;
     this.hud.show();
+    this.setupNetwork();
     this.clock.start();
     this.loop();
   }
 
   private get allEnemyColliders(): THREE.Object3D[] {
-    return [];
+    return [...this.remotePlayers.values()].map((rp) => rp.root);
   }
 
   /** Trigger fracture locally and optionally notify the server. */
@@ -258,7 +308,7 @@ export class Game {
       {
         onMeleeHit: (r) => {
           this.doFracture(r.point, r.normal);
-          this.onHitscanHit(r.object, 20, r.point); // 5 hits to kill
+          this.onHitscanHit(r.object, 25, r.point); // 4 hits to kill
         },
         onMeleeMiss: () => {},
         onThrowLaunch: ({ from, to, meshClone, hit, result }) => {
@@ -266,7 +316,7 @@ export class Game {
           proj.onArrive = () => {
             const normal = result?.normal ?? new THREE.Vector3(0, 1, 0);
             this.doFracture(to, normal);
-            if (hit && result) this.onHitscanHit(result.object, 50, to); // 2 hits to kill
+            if (hit && result) this.onHitscanHit(result.object, 25, to); // 4 hits to kill
             this.projectiles = this.projectiles.filter((p) => p !== proj);
           };
           this.projectiles.push(proj);
@@ -336,6 +386,16 @@ export class Game {
       [...this.remotePlayers.values()].map((rp) => rp.shirtColor),
     );
     this.onTakenColorsChanged(colors);
+  }
+
+  /** Safety net: remove any RemotePlayer that was accidentally created for our own socket ID. */
+  private removeSelfRemote(): void {
+    if (!this.net.playerId) return;
+    const self = this.remotePlayers.get(this.net.playerId);
+    if (self) {
+      self.destroy(this.scene);
+      this.remotePlayers.delete(this.net.playerId);
+    }
   }
 
   destroy(): void {

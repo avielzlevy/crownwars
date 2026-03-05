@@ -28,6 +28,9 @@ const updateSwatches = (takenColors: Set<number>) => {
 const game = new Game();
 game.onTakenColorsChanged = updateSwatches;
 
+// Clean disconnect on page refresh to prevent ghost players
+window.addEventListener('beforeunload', () => game.destroy());
+
 game.init().then(() => {
   let started = false;
 

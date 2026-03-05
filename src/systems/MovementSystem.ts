@@ -104,20 +104,16 @@ export class MovementSystem {
     // ── Integrate ────────────────────────────────────────────────────────────
     s.position.addScaledVector(s.velocity, delta);
 
-    // ── Floor collision ───────────────────────────────────────────────────────
-    const floorY = s.currentHeight * 0.5; // eye height = half body
-    if (s.position.y <= floorY) {
+    // ── Floor collision (only within arena bounds) ────────────────────────────
+    const inArena = Math.abs(s.position.x) <= ARENA_HALF_X && Math.abs(s.position.z) <= ARENA_HALF_Z;
+    const floorY  = s.currentHeight * 0.5; // eye height = half body
+    if (inArena && s.position.y <= floorY) {
       s.position.y = floorY;
       s.velocity.y = 0;
       s.onGround   = true;
-    } else {
+    } else if (!inArena || s.position.y > floorY) {
       s.onGround = false;
     }
-
-    // ── Arena wall clamp ─────────────────────────────────────────────────────
-    const margin = 0.4;
-    s.position.x = Math.max(-(ARENA_HALF_X - margin), Math.min(ARENA_HALF_X - margin, s.position.x));
-    s.position.z = Math.max(-(ARENA_HALF_Z - margin), Math.min(ARENA_HALF_Z - margin, s.position.z));
   }
 
   getYaw(): number   { return this.yaw; }

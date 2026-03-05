@@ -7,6 +7,8 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3001;
 const httpServer = (0, http_1.createServer)();
 const io = new socket_io_1.Server(httpServer, {
     cors: { origin: '*' },
+    pingTimeout: 3000,
+    pingInterval: 1500,
 });
 // Single room for now — M6 will add lobby/room management
 const room = new GameRoom_1.GameRoom(io, 'main');

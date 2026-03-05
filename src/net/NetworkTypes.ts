@@ -74,15 +74,30 @@ export interface C_HitNotify {
   point:    Vec3;
 }
 
+// ─── Shared constants ─────────────────────────────────────────────────────────
+
+/** Fixed chair spawn positions (x, z). Used by both client and server. */
+export const CHAIR_POSITIONS: { x: number; z: number }[] = [
+  { x:  15,  z:  0 },
+  { x: -15,  z:  0 },
+  { x:  0,   z:  13 },
+  { x:  0,   z: -13 },
+  { x:  11,  z:  11 },
+  { x: -11,  z:  11 },
+  { x:  11,  z: -11 },
+  { x: -11,  z: -11 },
+];
+
 // ─── Socket event maps ────────────────────────────────────────────────────────
 
 export interface ServerToClientEvents {
-  initialState: (state: S_InitialState) => void;
-  gameState:    (state: S_GameState) => void;
-  playerJoined: (player: S_PlayerState) => void;
-  playerLeft:   (id: string) => void;
-  fracture:     (event: S_FractureEvent) => void;
-  hitConfirmed: (hit: S_HitConfirmed) => void;
+  initialState:  (state: S_InitialState) => void;
+  gameState:     (state: S_GameState) => void;
+  playerJoined:  (player: S_PlayerState) => void;
+  playerLeft:    (id: string) => void;
+  fracture:      (event: S_FractureEvent) => void;
+  hitConfirmed:  (hit: S_HitConfirmed) => void;
+  chairPickedUp: (chairId: string) => void;
 }
 
 export interface ClientToServerEvents {
