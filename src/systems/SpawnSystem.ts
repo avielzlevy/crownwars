@@ -1,7 +1,7 @@
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { Chair } from '../entities/Chair';
-import { CHAIR_POSITIONS } from '../net/NetworkTypes';
+import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { Chair } from "../entities/Chair";
+import { CHAIR_POSITIONS } from "../net/NetworkTypes";
 
 export class SpawnSystem {
   readonly chairs: Chair[] = [];
@@ -16,10 +16,15 @@ export class SpawnSystem {
     });
   }
 
-  private spawnChairAt(scene: THREE.Scene, id: string, x: number, z: number): void {
+  private spawnChairAt(
+    scene: THREE.Scene,
+    id: string,
+    x: number,
+    z: number,
+  ): void {
     if (!this.proto) return;
 
-    const mesh  = this.proto.clone();
+    const mesh = this.proto.clone();
     const chair = new Chair(mesh, id);
 
     // Apply per-axis scale so chair is exactly 40×90×40 cm in world space
@@ -46,7 +51,7 @@ export class SpawnSystem {
     const idx = this.chairs.findIndex((c) => c.id === id);
     if (idx === -1) return;
     const chair = this.chairs[idx];
-    chair.state = 'broken';
+    chair.state = "broken";
     scene.remove(chair.mesh);
     this.chairs.splice(idx, 1);
   }
@@ -55,7 +60,8 @@ export class SpawnSystem {
   getNearbyCchairs(pos: THREE.Vector3, radius: number): Chair[] {
     const r2 = radius * radius;
     return this.chairs.filter(
-      (c) => c.state === 'intact' && c.mesh.position.distanceToSquared(pos) < r2,
+      (c) =>
+        c.state === "intact" && c.mesh.position.distanceToSquared(pos) < r2,
     );
   }
 }

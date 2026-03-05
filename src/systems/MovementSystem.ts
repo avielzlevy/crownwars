@@ -1,12 +1,19 @@
-import * as THREE from 'three';
-import type { InputSystem } from './InputSystem';
+import * as THREE from "three";
+import type { InputSystem } from "./InputSystem";
 import {
-  MOVE_SPEED, SPRINT_MULTIPLIER, CROUCH_MULTIPLIER,
-  JUMP_VELOCITY, GRAVITY,
-  PLAYER_HEIGHT, CROUCH_HEIGHT,
-  SPRINT_MAX, SPRINT_DRAIN, SPRINT_REGEN,
-  ARENA_HALF_X, ARENA_HALF_Z,
-} from '../utils/Constants';
+  MOVE_SPEED,
+  SPRINT_MULTIPLIER,
+  CROUCH_MULTIPLIER,
+  JUMP_VELOCITY,
+  GRAVITY,
+  PLAYER_HEIGHT,
+  CROUCH_HEIGHT,
+  SPRINT_MAX,
+  SPRINT_DRAIN,
+  SPRINT_REGEN,
+  ARENA_HALF_X,
+  ARENA_HALF_Z,
+} from "../utils/Constants";
 
 export interface MovementState {
   position: THREE.Vector3;
@@ -23,18 +30,18 @@ const _forward = new THREE.Vector3();
 const _right = new THREE.Vector3();
 
 export class MovementSystem {
-  private yaw = 0;   // radians, horizontal look
+  private yaw = 0; // radians, horizontal look
   private pitch = 0; // radians, vertical look
-  readonly lookDir = new THREE.Euler(0, 0, 0, 'YXZ');
+  readonly lookDir = new THREE.Euler(0, 0, 0, "YXZ");
   readonly quaternion = new THREE.Quaternion();
 
   readonly state: MovementState = {
-    position:      new THREE.Vector3(0, PLAYER_HEIGHT, 0),
-    velocity:      new THREE.Vector3(),
-    onGround:      true,
-    isCrouching:   false,
-    isSprinting:   false,
-    stamina:       SPRINT_MAX,
+    position: new THREE.Vector3(0, PLAYER_HEIGHT, 0),
+    velocity: new THREE.Vector3(),
+    onGround: true,
+    isCrouching: false,
+    isSprinting: false,
+    stamina: SPRINT_MAX,
     currentHeight: PLAYER_HEIGHT,
   };
 
@@ -42,10 +49,13 @@ export class MovementSystem {
   sensitivity = 0.0015;
 
   applyMouseLook(dx: number, dy: number): void {
-    this.yaw   -= dx * this.sensitivity;
+    this.yaw -= dx * this.sensitivity;
     this.pitch -= dy * this.sensitivity;
-    this.pitch  = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch));
-    this.lookDir.set(this.pitch, this.yaw, 0, 'YXZ');
+    this.pitch = Math.max(
+      -Math.PI / 2 + 0.01,
+      Math.min(Math.PI / 2 - 0.01, this.pitch),
+    );
+    this.lookDir.set(this.pitch, this.yaw, 0, "YXZ");
     this.quaternion.setFromEuler(this.lookDir);
   }
 
@@ -53,19 +63,23 @@ export class MovementSystem {
     const s = this.state;
 
     // ── Crouch ────────────────────────────────────────────────────────────────
-    const wantCrouch = input.isDown('ShiftLeft') || input.isDown('ControlLeft');
+    const wantCrouch = input.isDown("ShiftLeft") || input.isDown("ControlLeft");
     s.isCrouching = wantCrouch;
-    const targetH  = wantCrouch ? CROUCH_HEIGHT : PLAYER_HEIGHT;
-    s.currentHeight = THREE.MathUtils.lerp(s.currentHeight, targetH, Math.min(1, delta * 12));
+    const targetH = wantCrouch ? CROUCH_HEIGHT : PLAYER_HEIGHT;
+    s.currentHeight = THREE.MathUtils.lerp(
+      s.currentHeight,
+      targetH,
+      Math.min(1, delta * 12),
+    );
 
     // ── Sprint ────────────────────────────────────────────────────────────────
-    const wantSprint = input.isDown('ShiftLeft') && !wantCrouch;
+    const wantSprint = input.isDown("ShiftLeft") && !wantCrouch;
     if (wantSprint && s.stamina > 0) {
       s.isSprinting = true;
-      s.stamina     = Math.max(0, s.stamina - SPRINT_DRAIN * delta);
+      s.stamina = Math.max(0, s.stamina - SPRINT_DRAIN * delta);
     } else {
       s.isSprinting = false;
-      s.stamina     = Math.min(SPRINT_MAX, s.stamina + SPRINT_REGEN * delta);
+      s.stamina = Math.min(SPRINT_MAX, s.stamina + SPRINT_REGEN * delta);
     }
 
     // ── Horizontal movement ───────────────────────────────────────────────────
@@ -77,10 +91,10 @@ export class MovementSystem {
     _right.normalize();
 
     _dir.set(0, 0, 0);
-    if (input.isDown('KeyW') || input.isDown('ArrowUp'))    _dir.add(_forward);
-    if (input.isDown('KeyS') || input.isDown('ArrowDown'))  _dir.sub(_forward);
-    if (input.isDown('KeyA') || input.isDown('ArrowLeft'))  _dir.sub(_right);
-    if (input.isDown('KeyD') || input.isDown('ArrowRight')) _dir.add(_right);
+    if (input.isDown("KeyW") || input.isDown("ArrowUp")) _dir.add(_forward);
+    if (input.isDown("KeyS") || input.isDown("ArrowDown")) _dir.sub(_forward);
+    if (input.isDown("KeyA") || input.isDown("ArrowLeft")) _dir.sub(_right);
+    if (input.isDown("KeyD") || input.isDown("ArrowRight")) _dir.add(_right);
     if (_dir.lengthSq() > 0) _dir.normalize();
 
     let speed = MOVE_SPEED;
@@ -91,9 +105,9 @@ export class MovementSystem {
     s.velocity.z = _dir.z * speed;
 
     // ── Jump ──────────────────────────────────────────────────────────────────
-    if ((input.isDown('Space')) && s.onGround) {
+    if (input.isDown("Space") && s.onGround) {
       s.velocity.y = JUMP_VELOCITY;
-      s.onGround   = false;
+      s.onGround = false;
     }
 
     // ── Gravity ───────────────────────────────────────────────────────────────
@@ -105,17 +119,23 @@ export class MovementSystem {
     s.position.addScaledVector(s.velocity, delta);
 
     // ── Floor collision (only within arena bounds) ────────────────────────────
-    const inArena = Math.abs(s.position.x) <= ARENA_HALF_X && Math.abs(s.position.z) <= ARENA_HALF_Z;
-    const floorY  = s.currentHeight * 0.5; // eye height = half body
+    const inArena =
+      Math.abs(s.position.x) <= ARENA_HALF_X &&
+      Math.abs(s.position.z) <= ARENA_HALF_Z;
+    const floorY = s.currentHeight * 0.5; // eye height = half body
     if (inArena && s.position.y <= floorY) {
       s.position.y = floorY;
       s.velocity.y = 0;
-      s.onGround   = true;
+      s.onGround = true;
     } else if (!inArena || s.position.y > floorY) {
       s.onGround = false;
     }
   }
 
-  getYaw(): number   { return this.yaw; }
-  getPitch(): number { return this.pitch; }
+  getYaw(): number {
+    return this.yaw;
+  }
+  getPitch(): number {
+    return this.pitch;
+  }
 }

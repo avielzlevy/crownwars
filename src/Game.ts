@@ -1,71 +1,71 @@
-import * as THREE from 'three';
-import { InputSystem }      from './systems/InputSystem';
-import { MovementSystem }   from './systems/MovementSystem';
-import { CameraSystem }     from './systems/CameraSystem';
-import { SpawnSystem }      from './systems/SpawnSystem';
-import { PickupSystem }     from './systems/PickupSystem';
-import { HitscanSystem }    from './systems/HitscanSystem';
-import { WeaponSystem }     from './systems/WeaponSystem';
-import { PhysicsSystem }    from './systems/PhysicsSystem';
-import { FractureSystem }   from './systems/FractureSystem';
-import { ArenaScene }       from './scenes/ArenaScene';
-import { HeldItemView }     from './entities/HeldItemView';
-import { Chair }            from './entities/Chair';
-import { CharacterModel }   from './entities/CharacterModel';
-import { RemotePlayer }     from './entities/RemotePlayer';
-import { PLAYER_HEIGHT }    from './utils/Constants';
-import { ThrowProjectile }  from './vfx/ThrowProjectile';
-import { ImpactParticles }  from './vfx/ImpactParticles';
-import { HUD }              from './ui/HUD';
-import { NetworkManager }   from './net/NetworkManager';
+import * as THREE from "three";
+import { InputSystem } from "./systems/InputSystem";
+import { MovementSystem } from "./systems/MovementSystem";
+import { CameraSystem } from "./systems/CameraSystem";
+import { SpawnSystem } from "./systems/SpawnSystem";
+import { PickupSystem } from "./systems/PickupSystem";
+import { HitscanSystem } from "./systems/HitscanSystem";
+import { WeaponSystem } from "./systems/WeaponSystem";
+import { PhysicsSystem } from "./systems/PhysicsSystem";
+import { FractureSystem } from "./systems/FractureSystem";
+import { ArenaScene } from "./scenes/ArenaScene";
+import { HeldItemView } from "./entities/HeldItemView";
+import { Chair } from "./entities/Chair";
+import { CharacterModel } from "./entities/CharacterModel";
+import { RemotePlayer } from "./entities/RemotePlayer";
+import { PLAYER_HEIGHT } from "./utils/Constants";
+import { ThrowProjectile } from "./vfx/ThrowProjectile";
+import { ImpactParticles } from "./vfx/ImpactParticles";
+import { HUD } from "./ui/HUD";
+import { NetworkManager } from "./net/NetworkManager";
 
-const SERVER_URL    = `http://${window.location.hostname}:3001`;
+const SERVER_URL = `http://${window.location.hostname}:3001`;
 const NET_SEND_RATE = 1 / 20; // 20 Hz
 
 export class Game {
-  private renderer!:  THREE.WebGLRenderer;
-  private scene!:     THREE.Scene;
-  private clock =     new THREE.Clock();
+  private renderer!: THREE.WebGLRenderer;
+  private scene!: THREE.Scene;
+  private clock = new THREE.Clock();
 
-  private input    = new InputSystem();
+  private input = new InputSystem();
   private movement = new MovementSystem();
-  private camera   = new CameraSystem();
-  private arena    = new ArenaScene();
-  private spawn    = new SpawnSystem();
-  private pickup   = new PickupSystem();
-  private hitscan  = new HitscanSystem();
-  private weapon   = new WeaponSystem();
-  private physics  = new PhysicsSystem();
+  private camera = new CameraSystem();
+  private arena = new ArenaScene();
+  private spawn = new SpawnSystem();
+  private pickup = new PickupSystem();
+  private hitscan = new HitscanSystem();
+  private weapon = new WeaponSystem();
+  private physics = new PhysicsSystem();
   private fracture = new FractureSystem();
-  private net      = new NetworkManager();
-  private hud      = new HUD();
+  private net = new NetworkManager();
+  private hud = new HUD();
 
-  private heldView!:       HeldItemView;
-  private particles!:      ImpactParticles;
-  private projectiles:     ThrowProjectile[] = [];
-  private remotePlayers    = new Map<string, RemotePlayer>();
+  private heldView!: HeldItemView;
+  private particles!: ImpactParticles;
+  private projectiles: ThrowProjectile[] = [];
+  private remotePlayers = new Map<string, RemotePlayer>();
 
-  private running       = false;
-  private animId        = 0;
-  private ready         = false;
-  private tick          = 0;
-  private netTimer      = 0;
-  private playerName    = 'Player';
-  private playerShirt   = 0x3b82f6;
-  private localHealth   = 100;
-  private dead          = false;
-  private deathTimer    = 0;
+  private running = false;
+  private animId = 0;
+  private ready = false;
+  private tick = 0;
+  private netTimer = 0;
+  private playerName = "Player";
+  private playerShirt = 0x3b82f6;
+  private localHealth = 100;
+  private dead = false;
+  private deathTimer = 0;
 
   /** Called whenever the set of shirt colours in use by remote players changes. */
   onTakenColorsChanged: ((colors: Set<number>) => void) | null = null;
 
   setName(name: string): void {
-    this.playerName     = name || 'Player';
+    this.playerName = name || "Player";
     this.net.playerName = this.playerName;
   }
 
   setShirtColor(hex: number): void {
-    this.playerShirt    = hex;
+    this.playerShirt = hex;
     this.net.shirtColor = hex;
   }
 
@@ -83,7 +83,7 @@ export class Game {
     this.hud.hideDeath();
     // Respawn at a random edge position around the arena
     const angle = Math.random() * Math.PI * 2;
-    const dist  = 12;
+    const dist = 12;
     this.movement.state.position.set(
       Math.cos(angle) * dist,
       PLAYER_HEIGHT,
@@ -97,7 +97,7 @@ export class Game {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     document.body.prepend(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
@@ -108,19 +108,23 @@ export class Game {
 
     await this.physics.init();
     if (Chair.protoMesh) {
-      this.fracture.buildFromPrototype(Chair.protoMesh, this.scene, this.physics);
+      this.fracture.buildFromPrototype(
+        Chair.protoMesh,
+        this.scene,
+        this.physics,
+      );
     }
 
     this.particles = new ImpactParticles(this.scene);
-    this.heldView  = new HeldItemView(this.scene);
+    this.heldView = new HeldItemView(this.scene);
 
     this.input.init();
 
-    this.renderer.domElement.addEventListener('click', () => {
+    this.renderer.domElement.addEventListener("click", () => {
       this.renderer.domElement.requestPointerLock();
     });
 
-    window.addEventListener('resize', () => {
+    window.addEventListener("resize", () => {
       this.renderer.setSize(window.innerWidth, window.innerHeight);
       this.camera.onResize();
     });
@@ -132,7 +136,7 @@ export class Game {
     this.net.connect(SERVER_URL);
 
     // Receive existing state when we join
-    this.net.on('initialState', (state) => {
+    this.net.on("initialState", (state) => {
       // Authoritatively set playerId from server-provided ID
       this.net.playerId = state.yourId;
 
@@ -155,12 +159,12 @@ export class Game {
     });
 
     // Another player picked up a chair — remove it from our scene
-    this.net.on('chairPickedUp', (chairId) => {
+    this.net.on("chairPickedUp", (chairId) => {
       this.spawn.removeChairById(chairId, this.scene);
     });
 
     // Another player joined after us
-    this.net.on('playerJoined', (p) => {
+    this.net.on("playerJoined", (p) => {
       if (p.id === this.net.playerId) return; // never create self
       if (!this.remotePlayers.has(p.id)) {
         this.remotePlayers.set(p.id, new RemotePlayer(p, this.scene));
@@ -168,13 +172,16 @@ export class Game {
     });
 
     // Player left
-    this.net.on('playerLeft', (id) => {
+    this.net.on("playerLeft", (id) => {
       const rp = this.remotePlayers.get(id);
-      if (rp) { rp.destroy(this.scene); this.remotePlayers.delete(id); }
+      if (rp) {
+        rp.destroy(this.scene);
+        this.remotePlayers.delete(id);
+      }
     });
 
     // Server's 20 Hz state broadcast — update remote player positions
-    this.net.on('gameState', (state) => {
+    this.net.on("gameState", (state) => {
       const activeIds = new Set<string>();
 
       for (const p of state.players) {
@@ -203,14 +210,18 @@ export class Game {
     });
 
     // Another client triggered a fracture — play it locally
-    this.net.on('fracture', (event) => {
-      const pt  = new THREE.Vector3(event.point.x,  event.point.y,  event.point.z);
-      const nor = new THREE.Vector3(event.normal.x, event.normal.y, event.normal.z);
+    this.net.on("fracture", (event) => {
+      const pt = new THREE.Vector3(event.point.x, event.point.y, event.point.z);
+      const nor = new THREE.Vector3(
+        event.normal.x,
+        event.normal.y,
+        event.normal.z,
+      );
       this.doFracture(pt, nor, false); // false = don't re-notify server
     });
 
     // Hit confirmed by server
-    this.net.on('hitConfirmed', (hit) => {
+    this.net.on("hitConfirmed", (hit) => {
       if (hit.targetId === this.net.playerId) {
         this.localHealth = Math.max(0, this.localHealth - hit.damage);
         this.hud.setHealth(this.localHealth);
@@ -234,9 +245,9 @@ export class Game {
 
   /** Trigger fracture locally and optionally notify the server. */
   private doFracture(
-    point:  THREE.Vector3,
+    point: THREE.Vector3,
     normal: THREE.Vector3,
-    notify  = true,
+    notify = true,
   ): void {
     this.fracture.fracture(point, normal, Chair.computedScale);
     this.particles.burst(point, normal);
@@ -245,11 +256,18 @@ export class Game {
     }
   }
 
-  private onHitscanHit(object: THREE.Object3D, damage: number, point: THREE.Vector3): void {
+  private onHitscanHit(
+    object: THREE.Object3D,
+    damage: number,
+    point: THREE.Vector3,
+  ): void {
     // Remote players — notify server
     let node: THREE.Object3D | null = object;
     while (node) {
-      const tagged = node as THREE.Object3D & { isRemote?: boolean; remoteId?: string };
+      const tagged = node as THREE.Object3D & {
+        isRemote?: boolean;
+        remoteId?: string;
+      };
       if (tagged.isRemote && tagged.remoteId) {
         this.net.sendHit({ targetId: tagged.remoteId, damage, point });
         return;
@@ -275,7 +293,7 @@ export class Game {
     this.movement.update(this.input, delta);
 
     if (this.input.cameraToggle) {
-      this.camera.mode = this.camera.mode === 'first' ? 'third' : 'first';
+      this.camera.mode = this.camera.mode === "first" ? "third" : "first";
     }
 
     this.camera.update(this.movement.state, this.movement.quaternion, delta);
@@ -329,7 +347,7 @@ export class Game {
       this.hud.setHeldItem(null);
       this.hud.setThrowReady(false);
     } else {
-      this.hud.setThrowReady(this.weapon.state === 'idle');
+      this.hud.setThrowReady(this.weapon.state === "idle");
     }
 
     this.heldView.update(
@@ -355,7 +373,7 @@ export class Game {
       this.netTimer -= NET_SEND_RATE;
       const s = this.movement.state;
       this.net.sendInput({
-        tick:     this.tick,
+        tick: this.tick,
         position: { x: s.position.x, y: s.position.y, z: s.position.z },
         rotation: {
           x: this.movement.getPitch(),
@@ -369,11 +387,13 @@ export class Game {
     this.hud.setHealth(this.localHealth);
     this.hud.setStamina(s.stamina);
     this.hud.setDebug({
-      fps:    Math.round(1 / delta),
-      pos:    `${s.position.x.toFixed(1)}, ${s.position.y.toFixed(1)}, ${s.position.z.toFixed(1)}`,
-      cam:    this.camera.mode,
-      held:   this.pickup.held?.label ?? 'none',
-      online: this.net.connected ? `${this.remotePlayers.size + 1}p` : 'offline',
+      fps: Math.round(1 / delta),
+      pos: `${s.position.x.toFixed(1)}, ${s.position.y.toFixed(1)}, ${s.position.z.toFixed(1)}`,
+      cam: this.camera.mode,
+      held: this.pickup.held?.label ?? "none",
+      online: this.net.connected
+        ? `${this.remotePlayers.size + 1}p`
+        : "offline",
     });
 
     this.input.clearActions();
