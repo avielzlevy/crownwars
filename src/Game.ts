@@ -8,30 +8,18 @@ import { HitscanSystem }    from './systems/HitscanSystem';
 import { WeaponSystem }     from './systems/WeaponSystem';
 import { PhysicsSystem }    from './systems/PhysicsSystem';
 import { FractureSystem }   from './systems/FractureSystem';
-import { NavMeshSystem }    from './systems/NavMeshSystem';
-import { BotSystem }        from './systems/BotSystem';
 import { ArenaScene }       from './scenes/ArenaScene';
 import { HeldItemView }     from './entities/HeldItemView';
 import { Chair }            from './entities/Chair';
-import { TestDummy }        from './entities/TestDummy';
+import { CharacterModel }   from './entities/CharacterModel';
 import { RemotePlayer }     from './entities/RemotePlayer';
+import { PLAYER_HEIGHT }    from './utils/Constants';
 import { ThrowProjectile }  from './vfx/ThrowProjectile';
 import { ImpactParticles }  from './vfx/ImpactParticles';
 import { HUD }              from './ui/HUD';
 import { NetworkManager }   from './net/NetworkManager';
 
-const DUMMY_POSITIONS = [
-  new THREE.Vector3( 8,  0,  4),
-  new THREE.Vector3(-8,  0,  4),
-];
-
-const BOT_POSITIONS = [
-  new THREE.Vector3( 0,  0, -10),
-  new THREE.Vector3(14,  0,   6),
-  new THREE.Vector3(-14, 0,   6),
-];
-
-const SERVER_URL    = 'http://localhost:3001';
+const SERVER_URL    = `http://${window.location.hostname}:3001`;
 const NET_SEND_RATE = 1 / 20; // 20 Hz
 
 export class Game {
@@ -49,22 +37,42 @@ export class Game {
   private weapon   = new WeaponSystem();
   private physics  = new PhysicsSystem();
   private fracture = new FractureSystem();
-  private navMesh  = new NavMeshSystem();
-  private bots     = new BotSystem();
   private net      = new NetworkManager();
   private hud      = new HUD();
 
   private heldView!:       HeldItemView;
   private particles!:      ImpactParticles;
-  private dummies:         TestDummy[]      = [];
   private projectiles:     ThrowProjectile[] = [];
   private remotePlayers    = new Map<string, RemotePlayer>();
 
-  private running   = false;
-  private animId    = 0;
-  private ready     = false;
-  private tick      = 0;
-  private netTimer  = 0;
+  private running       = false;
+  private animId        = 0;
+  private ready         = false;
+  private tick          = 0;
+  private netTimer      = 0;
+  private playerName    = 'Player';
+  private playerShirt   = 0x3b82f6;
+  private localHealth   = 100;
+
+  /** Called whenever the set of shirt colours in use by remote players changes. */
+  onTakenColorsChanged: ((colors: Set<number>) => void) | null = null;
+
+  setName(name: string): void {
+    this.playerName     = name || 'Player';
+    this.net.playerName = this.playerName;
+  }
+
+  setShirtColor(hex: number): void {
+    this.playerShirt    = hex;
+    this.net.shirtColor = hex;
+  }
+
+  private respawn(): void {
+    this.localHealth = 100;
+    this.hud.setHealth(100);
+    this.movement.state.position.set(0, PLAYER_HEIGHT, 0);
+    this.movement.state.velocity.set(0, 0, 0);
+  }
 
   async init(): Promise<void> {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -78,28 +86,19 @@ export class Game {
     this.arena.build(this.scene);
 
     await this.spawn.init(this.scene);
+    await CharacterModel.loadPrototype();
 
     await this.physics.init();
     if (Chair.protoMesh) {
       this.fracture.buildFromPrototype(Chair.protoMesh, this.scene, this.physics);
     }
 
-    this.navMesh.build();
-    this.bots.spawn(BOT_POSITIONS, this.scene);
-
     this.particles = new ImpactParticles(this.scene);
     this.heldView  = new HeldItemView(this.scene);
-
-    for (const pos of DUMMY_POSITIONS) {
-      const dummy = new TestDummy(pos);
-      dummy.addToScene(this.scene);
-      this.dummies.push(dummy);
-    }
 
     this.setupNetwork();
 
     this.input.init();
-    this.hud.show();
 
     this.renderer.domElement.addEventListener('click', () => {
       this.renderer.domElement.requestPointerLock();
@@ -123,6 +122,7 @@ export class Game {
           this.remotePlayers.set(p.id, new RemotePlayer(p, this.scene));
         }
       }
+      this.emitTakenColors();
     });
 
     // Another player joined after us
@@ -141,7 +141,8 @@ export class Game {
     // Server's 20 Hz state broadcast — update remote player positions
     this.net.on('gameState', (state) => {
       for (const p of state.players) {
-        if (p.id === this.net.playerId) continue; // skip self
+        // Guard against race: playerId may not be set on very first packet
+        if (!this.net.playerId || p.id === this.net.playerId) continue;
         const rp = this.remotePlayers.get(p.id);
         if (rp) {
           rp.applyState(p);
@@ -149,6 +150,7 @@ export class Game {
           this.remotePlayers.set(p.id, new RemotePlayer(p, this.scene));
         }
       }
+      this.emitTakenColors();
     });
 
     // Another client triggered a fracture — play it locally
@@ -160,9 +162,10 @@ export class Game {
 
     // Hit confirmed by server
     this.net.on('hitConfirmed', (hit) => {
-      const rp = this.remotePlayers.get(hit.targetId);
-      if (rp) {
-        // TODO: show hit feedback on remote player (flash, health bar, etc.)
+      if (hit.targetId === this.net.playerId) {
+        this.localHealth = Math.max(0, this.localHealth - hit.damage);
+        this.hud.setHealth(this.localHealth);
+        if (this.localHealth <= 0) this.respawn();
       }
     });
   }
@@ -170,15 +173,13 @@ export class Game {
   start(): void {
     if (!this.ready) return;
     this.running = true;
+    this.hud.show();
     this.clock.start();
     this.loop();
   }
 
   private get allEnemyColliders(): THREE.Object3D[] {
-    return [
-      ...this.dummies.map((d) => d.collider),
-      ...this.bots.colliders,
-    ];
+    return [];
   }
 
   /** Trigger fracture locally and optionally notify the server. */
@@ -195,10 +196,6 @@ export class Game {
   }
 
   private onHitscanHit(object: THREE.Object3D, damage: number, point: THREE.Vector3): void {
-    // Bots
-    if (this.bots.onHit(object, damage)) return;
-    // Static dummies
-    this.checkDummyHit(object, damage);
     // Remote players — notify server
     let node: THREE.Object3D | null = object;
     while (node) {
@@ -261,7 +258,7 @@ export class Game {
       {
         onMeleeHit: (r) => {
           this.doFracture(r.point, r.normal);
-          this.onHitscanHit(r.object, 35, r.point);
+          this.onHitscanHit(r.object, 20, r.point); // 5 hits to kill
         },
         onMeleeMiss: () => {},
         onThrowLaunch: ({ from, to, meshClone, hit, result }) => {
@@ -269,7 +266,7 @@ export class Game {
           proj.onArrive = () => {
             const normal = result?.normal ?? new THREE.Vector3(0, 1, 0);
             this.doFracture(to, normal);
-            if (hit && result) this.onHitscanHit(result.object, 25, to);
+            if (hit && result) this.onHitscanHit(result.object, 50, to); // 2 hits to kill
             this.projectiles = this.projectiles.filter((p) => p !== proj);
           };
           this.projectiles.push(proj);
@@ -292,16 +289,13 @@ export class Game {
       this.weapon.swingT,
     );
 
-    // AI
-    this.bots.update(delta, this.movement.state.position, this.navMesh);
-
     // Remote players
     for (const rp of this.remotePlayers.values()) rp.update(delta);
 
     // Updates
     for (const p of this.projectiles) p.update(delta);
-    for (const d of this.dummies)     d.update(delta);
     this.fracture.update(delta);
+    this.arena.update(delta);
     this.physics.step(delta);
     this.particles.update(delta);
 
@@ -322,30 +316,26 @@ export class Game {
     }
 
     const s = this.movement.state;
+    this.hud.setHealth(this.localHealth);
     this.hud.setStamina(s.stamina);
     this.hud.setDebug({
-      fps:     Math.round(1 / delta),
-      pos:     `${s.position.x.toFixed(1)}, ${s.position.y.toFixed(1)}, ${s.position.z.toFixed(1)}`,
-      cam:     this.camera.mode,
-      held:    this.pickup.held?.label ?? 'none',
-      bots:    this.bots.bots.filter((b) => b.state !== 'dead').length,
-      online:  this.net.connected ? `${this.remotePlayers.size + 1}p` : 'offline',
+      fps:    Math.round(1 / delta),
+      pos:    `${s.position.x.toFixed(1)}, ${s.position.y.toFixed(1)}, ${s.position.z.toFixed(1)}`,
+      cam:    this.camera.mode,
+      held:   this.pickup.held?.label ?? 'none',
+      online: this.net.connected ? `${this.remotePlayers.size + 1}p` : 'offline',
     });
 
     this.input.clearActions();
     this.renderer.render(this.scene, this.camera.camera);
   }
 
-  private checkDummyHit(object: THREE.Object3D, damage: number): void {
-    let node: THREE.Object3D | null = object;
-    while (node) {
-      const tagged = node as THREE.Object3D & { isDummy?: boolean; dummy?: TestDummy };
-      if (tagged.isDummy && tagged.dummy) {
-        tagged.dummy.onHit(damage);
-        return;
-      }
-      node = node.parent;
-    }
+  private emitTakenColors(): void {
+    if (!this.onTakenColorsChanged) return;
+    const colors = new Set(
+      [...this.remotePlayers.values()].map((rp) => rp.shirtColor),
+    );
+    this.onTakenColorsChanged(colors);
   }
 
   destroy(): void {

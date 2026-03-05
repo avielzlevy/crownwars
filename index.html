@@ -78,16 +78,86 @@
       }
       #overlay h1 { font-size: 36px; letter-spacing: 0.1em; }
       #overlay p  { font-size: 13px; opacity: 0.6; }
+      #name-input {
+        background: rgba(255,255,255,0.12);
+        border: 1px solid rgba(255,255,255,0.35);
+        border-radius: 4px;
+        color: #fff;
+        font-family: monospace;
+        font-size: 16px;
+        padding: 8px 14px;
+        text-align: center;
+        outline: none;
+        width: 200px;
+      }
+      #name-input::placeholder { opacity: 0.45; }
+      #name-input:focus { border-color: rgba(255,255,255,0.7); }
+      .color-row {
+        display: flex; align-items: center; gap: 10px;
+        font-size: 12px; opacity: 0.7;
+      }
+      #color-swatches { display: flex; gap: 8px; }
+      .swatch {
+        width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
+        border: 3px solid transparent;
+        transition: border-color 0.12s, opacity 0.2s, transform 0.1s;
+      }
+      .swatch:hover:not(.taken) { transform: scale(1.15); }
+      .swatch.selected { border-color: #fff; }
+      .swatch.taken    { opacity: 0.22; cursor: not-allowed; pointer-events: none; }
+      #start-btn {
+        margin-top: 6px;
+        background: rgba(255,255,255,0.12);
+        border: 2px solid rgba(255,255,255,0.45);
+        color: #fff; font-family: monospace;
+        font-size: 18px; font-weight: bold; letter-spacing: 0.15em;
+        padding: 10px 36px; border-radius: 4px; cursor: pointer;
+        transition: background 0.15s;
+      }
+      #start-btn:hover { background: rgba(255,255,255,0.24); }
+      /* Health bar */
+      #health-wrap {
+        position: absolute;
+        bottom: 50px; left: 20px;
+        display: flex; align-items: center; gap: 8px;
+        font-size: 12px;
+      }
+      #health-bar-bg {
+        width: 120px; height: 8px;
+        background: rgba(255,255,255,0.15);
+        border-radius: 4px; overflow: hidden;
+      }
+      #health-bar {
+        height: 100%; width: 100%;
+        background: #44ee66;
+        border-radius: 4px;
+        transition: width 0.15s, background 0.3s;
+      }
     </style>
   </head>
   <body>
     <div id="overlay">
       <h1>CROWN WARS</h1>
-      <p>Click to start</p>
+      <input id="name-input" type="text" placeholder="Enter your name" maxlength="16" autocomplete="off" />
+      <div class="color-row">
+        <span>Shirt</span>
+        <div id="color-swatches">
+          <div class="swatch selected" data-color="3b82f6" style="background:#3b82f6" title="Blue"></div>
+          <div class="swatch"          data-color="e74c3c" style="background:#e74c3c" title="Red"></div>
+          <div class="swatch"          data-color="22c55e" style="background:#22c55e" title="Green"></div>
+          <div class="swatch"          data-color="f59e0b" style="background:#f59e0b" title="Yellow"></div>
+          <div class="swatch"          data-color="a855f7" style="background:#a855f7" title="Purple"></div>
+        </div>
+      </div>
+      <button id="start-btn">PLAY</button>
     </div>
     <div id="hud" style="display:none;">
       <div id="crosshair"></div>
       <div id="held-item"></div>
+      <div id="health-wrap">
+        <div id="health-bar-bg"><div id="health-bar"></div></div>
+        <span id="health-text">100</span>
+      </div>
       <div id="sprint-bar-wrap"><div id="sprint-bar"></div></div>
       <div id="debug"></div>
     </div>

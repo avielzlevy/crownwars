@@ -38,6 +38,8 @@ export class GameRoom {
   addPlayer(socket: Sock): void {
     const record: PlayerRecord = {
       id:         socket.id,
+      name:       'Player',
+      shirtColor: 0x3b82f6,
       position:   { x: 0, y: 1.7, z: 0 },
       rotation:   { x: 0, y: 0, z: 0 },
       heldItemId: null,
@@ -62,6 +64,8 @@ export class GameRoom {
       const p = this.players.get(socket.id);
       if (!p || input.tick <= p.lastTick) return;
       p.lastTick = input.tick;
+      if (input.name)       p.name       = input.name;
+      if (input.shirtColor) p.shirtColor = input.shirtColor;
       p.position = input.position;
       p.rotation = input.rotation;
     });
@@ -84,6 +88,11 @@ export class GameRoom {
         damage:    hit.damage,
         point:     hit.point,
       });
+      // Auto-respawn: reset health when eliminated
+      if (target.health <= 0) {
+        target.health = 100;
+        target.position = { x: 0, y: 1.7, z: 0 };
+      }
     });
 
     socket.on('pickupRequest', (chairId: string) => {

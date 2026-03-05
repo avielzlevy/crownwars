@@ -28,6 +28,10 @@ export class InputSystem {
   }
 
   private onKey(down: boolean, e: KeyboardEvent): void {
+    // Don't capture keys when typing in a text field
+    const tag = (document.activeElement as HTMLElement)?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
     this.keys[e.code] = down;
     if (down) {
       if (e.code === 'KeyF') this.pickupPressed = true;

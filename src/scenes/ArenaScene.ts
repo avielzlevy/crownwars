@@ -11,7 +11,8 @@ export class ArenaScene {
   /** Meshes that hitscan raycasters should test against. */
   readonly colliders: THREE.Mesh[] = [];
 
-  private textureLoader = new THREE.TextureLoader();
+  private waterMesh?: THREE.Mesh;
+  private waterTime = 0;
 
   build(scene: THREE.Scene): void {
     scene.add(this.root);
@@ -20,6 +21,14 @@ export class ArenaScene {
     this.buildWalls();
     this.buildCeiling();
     this.buildDecorativeElements();
+  }
+
+  update(delta: number): void {
+    if (!this.waterMesh) return;
+    this.waterTime += delta;
+    const mat = this.waterMesh.material as THREE.MeshPhongMaterial;
+    mat.opacity = 0.78 + Math.sin(this.waterTime * 1.4) * 0.08;
+    mat.color.setHSL(0.565 + Math.sin(this.waterTime * 0.3) * 0.015, 0.88, 0.52);
   }
 
   private buildLighting(scene: THREE.Scene): void {
@@ -49,76 +58,52 @@ export class ArenaScene {
   }
 
   private buildFloor(): void {
-    const w  = ARENA_HALF_X * 2;
-    const d  = ARENA_HALF_Z * 2;
-    const pw = w * 0.42;   // pool width
-    const pd = d * 0.42;   // pool depth
+    const w = ARENA_HALF_X * 2;
+    const d = ARENA_HALF_Z * 2;
 
+    // Single full floor plane (sand / tile colour)
     const tileMat = new THREE.MeshLambertMaterial({ color: 0xe8dcc8 });
+    const floor   = new THREE.Mesh(new THREE.PlaneGeometry(w, d), tileMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    this.root.add(floor);
+    this.colliders.push(floor);
 
-    // Four tile panels that leave a rectangular gap for the pool.
-    // Each panel is a PlaneGeometry (zero thickness — no z-fighting).
-    const panels: [number, number, number, number][] = [
-      // panelW, panelD, centerX, centerZ
-      [(w - pw) / 2, d,          -(ARENA_HALF_X + pw / 2) / 2 - pw / 4 + (w - pw) / 4, 0],  // left strip
-      [(w - pw) / 2, d,           (ARENA_HALF_X + pw / 2) / 2 + pw / 4 - (w - pw) / 4, 0],  // right strip
-      [pw,           (d - pd) / 2, 0,  (ARENA_HALF_Z + pd / 2) / 2 + pd / 4 - (d - pd) / 4], // front strip
-      [pw,           (d - pd) / 2, 0, -(ARENA_HALF_Z + pd / 2) / 2 - pd / 4 + (d - pd) / 4], // back strip
-    ];
+    // ── Round pool ──────────────────────────────────────────────────────────
+    const poolR  = 7.5;   // radius in metres
+    const depth  = 0.5;   // basin depth
+    const rimW   = 0.22;  // rim tile width
 
-    // Recompute with exact values for clarity
-    const lw = (w - pw) / 2;
-    const sh = (d - pd) / 2;
+    // Basin (sunken cylinder visible through water transparency)
+    const basinGeo = new THREE.CylinderGeometry(poolR, poolR, depth, 64);
+    const basinMat = new THREE.MeshLambertMaterial({ color: 0x7ecfe0 });
+    const basin    = new THREE.Mesh(basinGeo, basinMat);
+    basin.position.y = -depth / 2;
+    this.root.add(basin);
 
-    const exactPanels: [number, number, number, number][] = [
-      [lw, d,  -(pw / 2 + lw / 2), 0 ],  // left
-      [lw, d,   (pw / 2 + lw / 2), 0 ],  // right
-      [pw, sh,  0,  (pd / 2 + sh / 2)],  // far (north)
-      [pw, sh,  0, -(pd / 2 + sh / 2)],  // near (south)
-    ];
+    // Rim (flat ring of tiles around the water)
+    const rimGeo = new THREE.RingGeometry(poolR, poolR + rimW, 64);
+    const rimMat = new THREE.MeshLambertMaterial({ color: 0xd0e8f0 });
+    const rim    = new THREE.Mesh(rimGeo, rimMat);
+    rim.rotation.x = -Math.PI / 2;
+    rim.position.y = 0.001;
+    rim.receiveShadow = true;
+    this.root.add(rim);
 
-    for (const [pw2, pd2, cx, cz] of exactPanels) {
-      const geo   = new THREE.PlaneGeometry(pw2, pd2);
-      const plane = new THREE.Mesh(geo, tileMat);
-      plane.rotation.x = -Math.PI / 2;
-      plane.position.set(cx, 0, cz);
-      plane.receiveShadow = true;
-      this.root.add(plane);
-      this.colliders.push(plane);
-    }
-
-    // Pool: sunken basin visible through the gap
-    // Water surface plane sits at y = -0.02 (just below tile level — looks sunken)
-    const waterGeo = new THREE.PlaneGeometry(pw, pd);
-    const waterMat = new THREE.MeshLambertMaterial({ color: 0x29aae1, transparent: true, opacity: 0.88 });
-    const water    = new THREE.Mesh(waterGeo, waterMat);
+    // Water surface (animated in update())
+    const waterGeo = new THREE.CircleGeometry(poolR - 0.04, 64);
+    const waterMat = new THREE.MeshPhongMaterial({
+      color:       0x29aae1,
+      transparent: true,
+      opacity:     0.85,
+      shininess:   120,
+      specular:    new THREE.Color(0xaaddff),
+    });
+    const water = new THREE.Mesh(waterGeo, waterMat);
     water.rotation.x = -Math.PI / 2;
-    water.position.y = -0.02;
+    water.position.y = 0.002; // slightly above floor to avoid z-fighting
     this.root.add(water);
-
-    // Pool walls (4 thin boxes forming the basin rim, flush with tiles at top)
-    const wallMat  = new THREE.MeshLambertMaterial({ color: 0xd0e8f0 });
-    const depth    = 0.6;
-    const thick    = 0.08;
-    const poolWallDefs: [number, number, number, number, number][] = [
-      // w, h, d, x, z
-      [pw + thick * 2, depth, thick, 0,           pd / 2 + thick / 2],
-      [pw + thick * 2, depth, thick, 0,          -pd / 2 - thick / 2],
-      [thick,          depth, pd,    pw / 2 + thick / 2,  0],
-      [thick,          depth, pd,   -pw / 2 - thick / 2,  0],
-    ];
-    for (const [bw, bh, bd, bx, bz] of poolWallDefs) {
-      const geo  = new THREE.BoxGeometry(bw, bh, bd);
-      const mesh = new THREE.Mesh(geo, wallMat);
-      mesh.position.set(bx, -depth / 2, bz);
-      mesh.receiveShadow = true;
-      this.root.add(mesh);
-    }
-
-    // Grid lines on tile area only (grid covers whole arena but only visible above tiles)
-    const gridHelper = new THREE.GridHelper(Math.max(w, d), Math.max(w, d) / 2, 0xbbbbbb, 0xcccccc);
-    gridHelper.position.y = 0.002;
-    this.root.add(gridHelper);
+    this.waterMesh = water;
   }
 
   private buildWalls(): void {

@@ -16,8 +16,10 @@ type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
  */
 export class NetworkManager {
   private socket: GameSocket | null = null;
-  playerId  = '';
-  connected = false;
+  playerId    = '';
+  playerName  = 'Player';
+  shirtColor  = 0x3b82f6;
+  connected   = false;
 
   connect(serverUrl: string): void {
     this.socket = io(serverUrl, {
@@ -53,7 +55,7 @@ export class NetworkManager {
 
   sendInput(input: C_PlayerInput): void {
     if (!this.connected) return;
-    this.socket?.emit('playerInput', input);
+    this.socket?.emit('playerInput', { ...input, name: this.playerName, shirtColor: this.shirtColor });
   }
 
   sendFracture(event: C_FractureNotify): void {

@@ -18,11 +18,13 @@ export interface S_GameState {
 }
 
 export interface S_PlayerState {
-  id:         string;
-  position:   Vec3;
-  rotation:   Vec3;      // euler YXZ (yaw, pitch, roll)
-  heldItemId: string | null;
-  health:     number;
+  id:          string;
+  name:        string;
+  shirtColor?: number;   // hex integer, e.g. 0x3b82f6
+  position:    Vec3;
+  rotation:    Vec3;     // euler YXZ (yaw, pitch, roll)
+  heldItemId:  string | null;
+  health:      number;
 }
 
 export interface S_ChairState {
@@ -54,9 +56,11 @@ export interface S_InitialState {
 // ─── Client → Server ─────────────────────────────────────────────────────────
 
 export interface C_PlayerInput {
-  tick:     number;
-  position: Vec3;
-  rotation: Vec3;
+  tick:        number;
+  name?:       string;
+  shirtColor?: number;
+  position:    Vec3;
+  rotation:    Vec3;
 }
 
 export interface C_FractureNotify {

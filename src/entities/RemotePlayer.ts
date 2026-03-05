@@ -1,79 +1,107 @@
 import * as THREE from 'three';
 import type { S_PlayerState } from '../net/NetworkTypes';
+import { PLAYER_HEIGHT } from '../utils/Constants';
+import { CharacterModel } from './CharacterModel';
 
-const LERP_SPEED  = 12;   // position/rotation smoothing
-const SKIN_COLOR  = 0x4466ff; // blue — distinct from bots (green) and dummies (yellow)
+const LERP_SPEED = 12;
+/** Server sends position.y = PLAYER_HEIGHT/2 when standing; offset root to feet. */
+const Y_OFFSET   = -(PLAYER_HEIGHT / 2);
 
 export class RemotePlayer {
-  readonly root     = new THREE.Group();
-  readonly id:      string;
-  private meshes:   THREE.Mesh[] = [];
+  readonly root = new THREE.Group();
+  readonly id:  string;
 
-  // Interpolation targets
-  private targetPos = new THREE.Vector3();
-  private targetYaw = 0;
-  private legTimer  = 0;
-  private isMoving  = false;
+  private charRoot:    THREE.Group;
+  private label?:      THREE.Sprite;
+  private targetPos  = new THREE.Vector3();
+  private targetYaw  = 0;
+  private isMoving   = false;
+  private legTimer   = 0;
+  shirtColor         = 0x3b82f6;
 
   constructor(state: S_PlayerState, scene: THREE.Scene) {
-    this.id = state.id;
-    this.buildVisual();
+    this.id         = state.id;
+    this.shirtColor = state.shirtColor ?? 0x3b82f6;
+
+    this.charRoot = CharacterModel.clone(this.shirtColor);
+    this.root.add(this.charRoot);
+
+    this.buildLabel(state.name ?? state.id.slice(0, 6));
     this.applyState(state);
+
+    // Tag all descendant meshes for hitscan detection
+    this.root.traverse((child) => {
+      const obj = child as THREE.Object3D & { isRemote?: boolean; remoteId?: string };
+      obj.isRemote  = true;
+      obj.remoteId  = state.id;
+    });
+
     scene.add(this.root);
   }
 
-  private buildVisual(): void {
-    const mat = () => new THREE.MeshLambertMaterial({ color: SKIN_COLOR });
+  private buildLabel(name: string): void {
+    const canvas  = document.createElement('canvas');
+    canvas.width  = 256;
+    canvas.height = 56;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.beginPath();
+    ctx.roundRect(4, 4, 248, 48, 8);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font      = 'bold 26px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(name.slice(0, 16), 128, 28);
 
-    const add = (geo: THREE.BufferGeometry, x: number, y: number, z: number): THREE.Mesh => {
-      const m = new THREE.Mesh(geo, mat());
-      m.position.set(x, y, z);
-      m.castShadow = true;
-      this.root.add(m);
-      this.meshes.push(m);
-      return m;
-    };
-
-    // Same proportions as Bot / TestDummy
-    add(new THREE.BoxGeometry(0.42, 0.6, 0.28),  0, 1.0,  0); // torso
-    add(new THREE.SphereGeometry(0.16, 8, 8),     0, 1.58, 0); // head
-    add(new THREE.BoxGeometry(0.12, 0.5, 0.12), -0.29, 1.0, 0); // L arm
-    add(new THREE.BoxGeometry(0.12, 0.5, 0.12),  0.29, 1.0, 0); // R arm
-    add(new THREE.BoxGeometry(0.16, 0.55, 0.18), -0.13, 0.38, 0); // L leg
-    add(new THREE.BoxGeometry(0.16, 0.55, 0.18),  0.13, 0.38, 0); // R leg
+    const tex  = new THREE.CanvasTexture(canvas);
+    const mat  = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
+    this.label = new THREE.Sprite(mat);
+    this.label.scale.set(1.4, 0.31, 1);
+    this.label.position.set(0, PLAYER_HEIGHT + 0.35, 0); // above head
+    this.root.add(this.label);
   }
 
-  /** Called on every server gameState tick — sets the interpolation target. */
   applyState(state: S_PlayerState): void {
     const prev = this.targetPos.clone();
-    this.targetPos.set(state.position.x, state.position.y, state.position.z);
+    this.targetPos.set(state.position.x, state.position.y + Y_OFFSET, state.position.z);
     this.targetYaw = state.rotation.y;
     this.isMoving  = prev.distanceToSquared(this.targetPos) > 0.0001;
+
+    // Update shirt colour if it changed
+    const newColor = state.shirtColor ?? 0x3b82f6;
+    if (newColor !== this.shirtColor) {
+      this.shirtColor = newColor;
+      CharacterModel.applyShirtColor(this.charRoot, newColor);
+    }
   }
 
   update(delta: number): void {
     // Smooth position
     this.root.position.lerp(this.targetPos, Math.min(1, LERP_SPEED * delta));
 
-    // Smooth yaw
-    const dyaw = this.targetYaw - this.root.rotation.y;
-    // Wrap to [-π, π]
+    // Smooth yaw (wrap to [-π, π])
+    const dyaw   = this.targetYaw - this.root.rotation.y;
     const wrapped = ((dyaw + Math.PI) % (Math.PI * 2)) - Math.PI;
     this.root.rotation.y += wrapped * Math.min(1, LERP_SPEED * delta);
 
-    // Walking animation
-    if (this.isMoving) {
-      this.legTimer += delta * 8;
-      const swing = Math.sin(this.legTimer) * 0.35;
-      if (this.meshes[4]) this.meshes[4].rotation.x =  swing;
-      if (this.meshes[5]) this.meshes[5].rotation.x = -swing;
-      if (this.meshes[2]) this.meshes[2].rotation.x = -swing * 0.5;
-      if (this.meshes[3]) this.meshes[3].rotation.x =  swing * 0.5;
-    } else {
-      if (this.meshes[4]) this.meshes[4].rotation.x = 0;
-      if (this.meshes[5]) this.meshes[5].rotation.x = 0;
-      if (this.meshes[2]) this.meshes[2].rotation.x = 0;
-      if (this.meshes[3]) this.meshes[3].rotation.x = 0;
+    // Walking animation — only applies to the fallback box character.
+    // The GLB has no clip track to drive so we skip for real model.
+    if (!CharacterModel.proto) {
+      const meshes = this.charRoot.children as THREE.Mesh[];
+      if (this.isMoving) {
+        this.legTimer += delta * 8;
+        const swing = Math.sin(this.legTimer) * 0.35;
+        if (meshes[4]) meshes[4].rotation.x =  swing;
+        if (meshes[5]) meshes[5].rotation.x = -swing;
+        if (meshes[2]) meshes[2].rotation.x = -swing * 0.5;
+        if (meshes[3]) meshes[3].rotation.x =  swing * 0.5;
+      } else {
+        if (meshes[4]) meshes[4].rotation.x = 0;
+        if (meshes[5]) meshes[5].rotation.x = 0;
+        if (meshes[2]) meshes[2].rotation.x = 0;
+        if (meshes[3]) meshes[3].rotation.x = 0;
+      }
     }
   }
 

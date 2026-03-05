@@ -1,18 +1,22 @@
 import { SPRINT_MAX } from '../utils/Constants';
 
 export class HUD {
-  private root:       HTMLElement;
-  private heldItem:   HTMLElement;
-  private sprintBar:  HTMLElement;
-  private debugEl:    HTMLElement;
-  private crosshair:  HTMLElement;
+  private root:        HTMLElement;
+  private heldItem:    HTMLElement;
+  private sprintBar:   HTMLElement;
+  private debugEl:     HTMLElement;
+  private crosshair:   HTMLElement;
+  private healthBar:   HTMLElement;
+  private healthText:  HTMLElement;
 
   constructor() {
-    this.root      = document.getElementById('hud')!;
-    this.heldItem  = document.getElementById('held-item')!;
-    this.sprintBar = document.getElementById('sprint-bar')!;
-    this.debugEl   = document.getElementById('debug')!;
-    this.crosshair = document.getElementById('crosshair')!;
+    this.root        = document.getElementById('hud')!;
+    this.heldItem    = document.getElementById('held-item')!;
+    this.sprintBar   = document.getElementById('sprint-bar')!;
+    this.debugEl     = document.getElementById('debug')!;
+    this.crosshair   = document.getElementById('crosshair')!;
+    this.healthBar   = document.getElementById('health-bar')!;
+    this.healthText  = document.getElementById('health-text')!;
   }
 
   setThrowReady(ready: boolean): void {
@@ -24,6 +28,14 @@ export class HUD {
 
   setHeldItem(label: string | null): void {
     this.heldItem.textContent = label ? `[ ${label} ]` : '';
+  }
+
+  setHealth(hp: number): void {
+    const pct = Math.max(0, Math.min(100, hp));
+    this.healthBar.style.width = `${pct}%`;
+    this.healthBar.style.background =
+      pct > 50 ? '#44ee66' : pct > 25 ? '#ffcc00' : '#ff4444';
+    this.healthText.textContent = String(Math.ceil(pct));
   }
 
   setStamina(value: number): void {
